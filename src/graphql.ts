@@ -35,7 +35,7 @@ export type Resolver = (
 export type VariableMap = { [name: string]: any };
 
 export type ResultMapper = (values: {[fieldName: string]: any}, rootValue: any) => any;
-export type FragmentMatcher = (rootValue: any, typeCondition: string, context: any) => boolean;
+export type FragmentMatcher = (rootValue: any, typeCondition: string, context: any) => boolean|Promise<boolean>;
 
 export type ExecContext = {
   fragmentMap: FragmentMap;
@@ -150,18 +150,22 @@ function executeSelectionSet(
 
       const typeCondition = fragment.typeCondition.name.value;
 
-      if (execContext.fragmentMatcher(rootValue, typeCondition, contextValue)) {
-        const fragmentResultOrPromise = executeSelectionSet(
-          fragment.selectionSet,
-          rootValue,
-          execContext,
-        );
+      return promiseOrImmediate(execContext.fragmentMatcher(rootValue, typeCondition, contextValue), (fragmentMatcherResult) => {
 
-        return promiseOrImmediate(fragmentResultOrPromise, (fragmentResult) => {
-          merge(result, fragmentResult);
-        });
+        if (fragmentMatcherResult) {
+          const fragmentResultOrPromise = executeSelectionSet(
+            fragment.selectionSet,
+            rootValue,
+            execContext,
+          );
 
-      }
+          return promiseOrImmediate(fragmentResultOrPromise, (fragmentResult) => {
+            merge(result, fragmentResult);
+          });
+
+        }
+
+      });
     }
   })), () => {
     if (execContext.resultMapper) {
