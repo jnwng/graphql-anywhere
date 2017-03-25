@@ -36,6 +36,39 @@ describe('graphql anywhere', () => {
     });
   });
 
+  it('works with promises', async () => {
+    const resolver = (_, root) => Promise.resolve(root + 'fake');
+
+    const query = gql`
+      {
+        b {
+          c
+          ...dfrag
+        }
+      }
+
+      fragment dfrag on X {
+        d
+      }
+    `;
+
+    const result = await graphql(
+      resolver,
+      query,
+      '',
+      null,
+      null,
+    );
+
+    assert.deepEqual(result, {
+      b: {
+        c: 'fakefake',
+        d: 'fakefake',
+      },
+    });
+  });
+
+
   it('works with enum args', () => {
     const resolver = (fieldName, root, args) => args.value;
 

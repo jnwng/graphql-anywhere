@@ -114,24 +114,26 @@ function executeSelectionSet(
 
   const result = {};
 
-  selectionSet.selections.forEach((selection) => {
+  return promiseOrImmediate(arrayOrPromise(selectionSet.selections.map((selection) => {
     if (!shouldInclude(selection, variables)) {
       // Skip this entirely
       return;
     }
 
     if (isField(selection)) {
-      const fieldResult = executeField(
+      const fieldResultOrPromise = executeField(
         selection,
         rootValue,
         execContext,
       );
 
-      const resultFieldKey = resultKeyNameFromField(selection);
+      return promiseOrImmediate(fieldResultOrPromise, (fieldResult) => {
+        const resultFieldKey = resultKeyNameFromField(selection);
 
-      if (fieldResult !== undefined) {
-        result[resultFieldKey] = fieldResult;
-      }
+        if (fieldResult !== undefined) {
+          result[resultFieldKey] = fieldResult;
+        }
+      });
     } else {
       let fragment: InlineFragmentNode | FragmentDefinitionNode;
 
@@ -149,22 +151,25 @@ function executeSelectionSet(
       const typeCondition = fragment.typeCondition.name.value;
 
       if (execContext.fragmentMatcher(rootValue, typeCondition, contextValue)) {
-        const fragmentResult = executeSelectionSet(
+        const fragmentResultOrPromise = executeSelectionSet(
           fragment.selectionSet,
           rootValue,
           execContext,
         );
 
-        merge(result, fragmentResult);
+        return promiseOrImmediate(fragmentResultOrPromise, (fragmentResult) => {
+          merge(result, fragmentResult);
+        });
+
       }
     }
+  })), () => {
+    if (execContext.resultMapper) {
+      return execContext.resultMapper(result, rootValue);
+    }
+
+    return result;
   });
-
-  if (execContext.resultMapper) {
-    return execContext.resultMapper(result, rootValue);
-  }
-
-  return result;
 }
 
 function executeField(
@@ -186,30 +191,32 @@ function executeField(
     resultKey: resultKeyNameFromField(field),
   };
 
-  const result = resolver(fieldName, rootValue, args, contextValue, info);
+  const resultOrPromise = resolver(fieldName, rootValue, args, contextValue, info);
 
-  // Handle all scalar types here
-  if (!field.selectionSet) {
-    return result;
-  }
+  return promiseOrImmediate(resultOrPromise, (result) => {
+    // Handle all scalar types here
+    if (!field.selectionSet) {
+      return result;
+    }
 
-  // From here down, the field has a selection set, which means it's trying to
-  // query a GraphQLObjectType
-  if (result == null) {
-    // Basically any field in a GraphQL response can be null, or missing
-    return result;
-  }
+    // From here down, the field has a selection set, which means it's trying to
+    // query a GraphQLObjectType
+    if (result == null) {
+      // Basically any field in a GraphQL response can be null, or missing
+      return result;
+    }
 
-  if (Array.isArray(result)) {
-    return executeSubSelectedArray(field, result, execContext);
-  }
+    if (Array.isArray(result)) {
+      return executeSubSelectedArray(field, result, execContext);
+    }
 
-  // Returned value is an object, and the query has a sub-selection. Recurse.
-  return executeSelectionSet(
-    field.selectionSet,
-    result,
-    execContext,
-  );
+    // Returned value is an object, and the query has a sub-selection. Recurse.
+    return executeSelectionSet(
+      field.selectionSet,
+      result,
+      execContext,
+    );
+  });
 }
 
 function executeSubSelectedArray(
@@ -217,7 +224,7 @@ function executeSubSelectedArray(
   result,
   execContext,
 ) {
-  return result.map((item) => {
+  return arrayOrPromise(result.map((item) => {
     // null value in array
     if (item === null) {
       return null;
@@ -234,7 +241,7 @@ function executeSubSelectedArray(
       item,
       execContext,
     );
-  });
+  }));
 }
 
 function merge(dest, src) {
@@ -259,4 +266,24 @@ function merge(dest, src) {
       dest[srcKey] = src[srcKey];
     }
   });
+}
+
+function isPromise(obj) {
+  return obj && typeof obj === 'object' && typeof obj.then === 'function';
+}
+
+function promiseOrImmediate(obj, fn) {
+  if (isPromise(obj)) {
+    return obj.then(fn);
+  } else {
+    return fn(obj);
+  }
+}
+
+function arrayOrPromise(arr) {
+  if (arr.some(isPromise)) {
+    return Promise.all(arr);
+  } else {
+    return arr;
+  }
 }
