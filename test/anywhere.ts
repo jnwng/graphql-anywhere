@@ -37,34 +37,59 @@ describe('graphql anywhere', () => {
   });
 
   it('works with promises', async () => {
-    const resolver = (_, root) => Promise.resolve(root + 'fake');
+    const resolver = async ( fieldName, root, args, context, info, ) => {
+      return (await root)[info.resultKey];
+    };
+
+    const input = {
+      arrayWithSomePromises: [
+        Promise.resolve({ name: 'object in promise' }),
+        { name: 'plain object' },
+        {
+          name: 'nested object',
+          description: Promise.resolve([
+            Promise.resolve({ crazy: 'nesting' }),
+            Promise.resolve({ crazy: 'plain' }),
+          ]),
+        },
+      ],
+    };
 
     const query = gql`
       {
-        b {
-          c
-          ...dfrag
+        arrayWithSomePromises {
+          name
+          description {
+            ...dfrag
+          }
         }
       }
 
       fragment dfrag on X {
-        d
+        crazy
       }
     `;
 
     const result = await graphql(
       resolver,
       query,
-      '',
+      input,
       null,
       null,
     );
 
     assert.deepEqual(result, {
-      b: {
-        c: 'fakefake',
-        d: 'fakefake',
-      },
+      arrayWithSomePromises: [
+        { name: 'object in promise' },
+        { name: 'plain object' },
+        {
+          name: 'nested object',
+          description: [
+            { crazy: 'nesting' },
+            { crazy: 'plain' },
+          ],
+        },
+      ],
     });
   });
 
