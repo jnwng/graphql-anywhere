@@ -36,6 +36,8 @@ export type VariableMap = { [name: string]: any };
 
 export type ResultMapper = (values: {[fieldName: string]: any}, rootValue: any) => any;
 export type FragmentMatcher = (rootValue: any, typeCondition: string, context: any) => boolean|Promise<boolean>;
+export type DeferrableOrImmediate = (obj: any, fn: any) => any;
+export type ArrayOrDeferrable = (arr: [any]) => any;
 
 export type ExecContext = {
   fragmentMap: FragmentMap;
@@ -44,6 +46,8 @@ export type ExecContext = {
   resultMapper: ResultMapper;
   resolver: Resolver;
   fragmentMatcher: FragmentMatcher;
+  deferrableOrImmediate: DeferrableOrImmediate;
+  arrayOrDeferrable: ArrayOrDeferrable;
 };
 
 
@@ -55,6 +59,8 @@ export type ExecInfo = {
 export type ExecOptions = {
   resultMapper?: ResultMapper;
   fragmentMatcher?: FragmentMatcher;
+  deferrableOrImmediate?: DeferrableOrImmediate;
+  arrayOrDeferrable?: ArrayOrDeferrable;
 };
 
 // Based on graphql function from graphql-js:
@@ -84,6 +90,10 @@ export function graphql(
   // Default matcher always matches all fragments
   const fragmentMatcher = execOptions.fragmentMatcher || (() => true);
 
+  // Default deferrable is a promise
+  const deferrableOrImmediate = execOptions.deferrableOrImmediate || promiseOrImmediate;
+  const arrayOrDeferrable = execOptions.arrayOrDeferrable || arrayOrPromise;
+
   const execContext: ExecContext = {
     fragmentMap,
     contextValue,
@@ -91,6 +101,8 @@ export function graphql(
     resultMapper,
     resolver,
     fragmentMatcher,
+    deferrableOrImmediate,
+    arrayOrDeferrable,
   };
 
   return executeSelectionSet(
