@@ -37,7 +37,7 @@ export type VariableMap = { [name: string]: any };
 export type ResultMapper = (values: {[fieldName: string]: any}, rootValue: any) => any;
 export type FragmentMatcher = (rootValue: any, typeCondition: string, context: any) => boolean|Promise<boolean>;
 export type DeferrableOrImmediate = (obj: any, fn: any) => any;
-export type ArrayOrDeferrable = (arr: [any]) => any;
+export type ArrayOrDeferrable = (arr: any[]) => any;
 
 export type ExecContext = {
   fragmentMap: FragmentMap;
@@ -122,24 +122,26 @@ function executeSelectionSet(
     fragmentMap,
     contextValue,
     variableValues: variables,
+    deferrableOrImmediate,
+    arrayOrDeferrable,
   } = execContext;
 
   const result = {};
 
-  return promiseOrImmediate(arrayOrPromise(selectionSet.selections.map((selection) => {
+  return deferrableOrImmediate(arrayOrDeferrable(selectionSet.selections.map((selection) => {
     if (!shouldInclude(selection, variables)) {
       // Skip this entirely
       return;
     }
 
     if (isField(selection)) {
-      const fieldResultOrPromise = executeField(
+      const fieldResultOrDeferrable = executeField(
         selection,
         rootValue,
         execContext,
       );
 
-      return promiseOrImmediate(fieldResultOrPromise, (fieldResult) => {
+      return deferrableOrImmediate(fieldResultOrDeferrable, (fieldResult) => {
         const resultFieldKey = resultKeyNameFromField(selection);
 
         if (fieldResult !== undefined) {
@@ -162,16 +164,16 @@ function executeSelectionSet(
 
       const typeCondition = fragment.typeCondition.name.value;
 
-      return promiseOrImmediate(execContext.fragmentMatcher(rootValue, typeCondition, contextValue), (fragmentMatcherResult) => {
+      return deferrableOrImmediate(execContext.fragmentMatcher(rootValue, typeCondition, contextValue), (fragmentMatcherResult) => {
 
         if (fragmentMatcherResult) {
-          const fragmentResultOrPromise = executeSelectionSet(
+          const fragmentResultOrDeferrable = executeSelectionSet(
             fragment.selectionSet,
             rootValue,
             execContext,
           );
 
-          return promiseOrImmediate(fragmentResultOrPromise, (fragmentResult) => {
+          return deferrableOrImmediate(fragmentResultOrDeferrable, (fragmentResult) => {
             merge(result, fragmentResult);
           });
 
@@ -197,6 +199,7 @@ function executeField(
     variableValues: variables,
     contextValue,
     resolver,
+    deferrableOrImmediate,
   } = execContext;
 
   const fieldName = field.name.value;
@@ -207,9 +210,9 @@ function executeField(
     resultKey: resultKeyNameFromField(field),
   };
 
-  const resultOrPromise = resolver(fieldName, rootValue, args, contextValue, info);
+  const resultOrDeferrable = resolver(fieldName, rootValue, args, contextValue, info);
 
-  return promiseOrImmediate(resultOrPromise, (result) => {
+  return deferrableOrImmediate(resultOrDeferrable, (result) => {
     // Handle all scalar types here
     if (!field.selectionSet) {
       return result;
@@ -240,7 +243,7 @@ function executeSubSelectedArray(
   result,
   execContext,
 ) {
-  return arrayOrPromise(result.map((item) => {
+  return execContext.arrayOrDeferrable(result.map((item) => {
     // null value in array
     if (item === null) {
       return null;
