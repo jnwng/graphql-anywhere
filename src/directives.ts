@@ -1,11 +1,26 @@
 // Provides the methods that allow QueryManager to handle
 // the `skip` and `include` directives within GraphQL.
 import {
+  FieldNode,
   SelectionNode,
   VariableNode,
   BooleanValueNode,
+  DirectiveNode,
 } from 'graphql';
 
+export type DirectiveInfo = {
+  [fieldName: string]: {[argName: string]: any},
+};
+
+export function getDirectiveInfoFromField(field: FieldNode): DirectiveInfo {
+  return field.directives.reduce((directives: DirectiveInfo, directiveNode: DirectiveNode) => {
+    directives[directiveNode.name.value] = directiveNode.arguments.reduce((args, argumentNode) => {
+      args[argumentNode.name.value] = argumentNode.value;
+      return args;
+    }, {});
+    return directives;
+  }, {});
+}
 
 export function shouldInclude(selection: SelectionNode, variables: { [name: string]: any } = {}): Boolean {
   if (!selection.directives) {
