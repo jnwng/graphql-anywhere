@@ -30,7 +30,6 @@ node_modules
 yarn.lock
 
 # don't commit compiled files
-lib
 test-lib
 dist
 npm
